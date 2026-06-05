@@ -23,7 +23,9 @@
 
 如果还没安装 Python，请从 <https://www.python.org/downloads/> 安装，并勾选 `Add python.exe to PATH`。
 
-### 快速使用
+### 默认模式
+
+默认模式适合同一套模板材料直接跑，不需要改代码，也不需要手动设置格式。
 
 1. 下载或克隆本仓库。
 2. 第一次使用前，双击 `Install-Dependencies.bat`。
@@ -84,13 +86,22 @@ report.with-directories.docx
 表 1 示例表题注
 ```
 
-### 自定义字体和格式
+### 可配置项
 
-可以打开 `config\format-settings.json` 修改字体、字号、加粗和行距。保存后重新运行工具即可生效。
+如果要适配别的模板，可以打开 `config\format-settings.json` 修改配置。保存后重新运行工具即可生效。
 
-常用字段：
+可以配置的内容包括：
+
+- 主目录、插图清单、附表清单、引言的标题文字
+- 插图清单、附表清单、正文开头是否换新页
+- 目录标题、目录条目、正文标题、引言、图题注、表题注、图/表清单条目的字体
+- 字号
+- 是否加粗
+- 默认行间距
 
 ```text
+titles            标题文字：目录/插图清单/附表清单/引言
+page_breaks       分页开关：插图清单前/附表清单前/正文前
 front_title       目录/插图清单/附表清单标题
 toc_1/toc_2/toc_3 主目录一级/二级/三级条目
 heading_1/2/3     正文一级/二级/三级标题
@@ -99,6 +110,31 @@ intro_subheading  引言内部小标题，不进入目录
 caption           正文图题注、表题注
 list_entry        插图清单、附表清单条目
 line_spacing      默认行距
+```
+
+`titles` 示例：
+
+```json
+{
+  "titles": {
+    "toc": "目录",
+    "figures": "插图清单",
+    "tables": "附表清单",
+    "introduction": "引言"
+  }
+}
+```
+
+`page_breaks` 示例：
+
+```json
+{
+  "page_breaks": {
+    "before_figures": true,
+    "before_tables": true,
+    "before_body": true
+  }
+}
 ```
 
 每个格式项通常长这样：
@@ -156,7 +192,9 @@ This is a small Windows utility for updating Word report directories: the main t
 - Python 3
 - Internet access for first-time dependency installation
 
-### Quick Start
+### Default Mode
+
+Default mode is intended for reports that follow the same template. No code changes or manual formatting setup are needed.
 
 1. Download or clone this repository.
 2. Before first use, double-click `Install-Dependencies.bat`.
@@ -201,13 +239,22 @@ Figure and table captions should look like:
 表 1 Example table caption
 ```
 
-### Custom Formatting
+### Configurable Options
 
-Edit `config\format-settings.json` to customize fonts, font sizes, bold settings, and line spacing. The tool reads this file automatically when it exists.
+Edit `config\format-settings.json` to adapt the tool to another template. The tool reads this file automatically when it exists.
 
-Common keys:
+You can configure:
+
+- title text for the main TOC, list of figures, list of tables, and introduction
+- page breaks before the list of figures, list of tables, and body
+- fonts for TOC titles, TOC entries, body headings, introduction headings, captions, and figure/table list entries
+- font sizes
+- bold settings
+- default line spacing
 
 ```text
+titles            Title text: TOC/List of Figures/List of Tables/Introduction
+page_breaks       Page break switches: before figures/tables/body
 front_title       TOC/List of Figures/List of Tables titles
 toc_1/toc_2/toc_3 Main TOC level 1/2/3 entries
 heading_1/2/3     Body heading level 1/2/3

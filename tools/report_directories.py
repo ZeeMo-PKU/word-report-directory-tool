@@ -30,15 +30,24 @@ NUMBERED_HEADING_RE = re.compile(r"^(?P<number>\d+(?:\.\d+){0,2})\s+(?P<title>\S
 FIG_RE = re.compile(r"^图\s+\d+(?:\.\d+)?\s+")
 TAB_RE = re.compile(r"^表\s+\d+(?:\.\d+)?\s+")
 TOC_LINE_RE = re.compile(r"^(\d+(?:\.\d+){0,2})\s+(.+?)\s+(\d+)$")
-INTRO_TOC_LINE_RE = re.compile(rf"^{re.escape(TITLE_INTRODUCTION)}\s+(\d+)$")
 HEADING_STYLE_IDS = {1: "Heading1", 2: "Heading2", 3: "Heading3"}
 HEADING_STYLE_NAMES = {
     1: ("Heading 1", "标题 1"),
     2: ("Heading 2", "标题 2"),
     3: ("Heading 3", "标题 3"),
 }
-FRONT_TITLES = {TITLE_TOC, TITLE_FIGURES, TITLE_TABLES}
 DEFAULT_FORMAT_CONFIG = {
+    "titles": {
+        "toc": "目录",
+        "figures": "插图清单",
+        "tables": "附表清单",
+        "introduction": "引言",
+    },
+    "page_breaks": {
+        "before_figures": True,
+        "before_tables": True,
+        "before_body": True,
+    },
     "front_title": {"font": "仿宋", "size": 16, "bold": True},
     "toc_1": {"font": "宋体", "size": 12, "bold": None},
     "toc_2": {"font": "宋体", "size": 12, "bold": None},
@@ -105,6 +114,20 @@ def line_spacing() -> float:
     return float(value)
 
 
+def config_title(name: str) -> str:
+    titles = FORMAT_CONFIG.get("titles", {})
+    if isinstance(titles, dict) and name in titles:
+        return str(titles[name])
+    return str(DEFAULT_FORMAT_CONFIG["titles"][name])
+
+
+def page_break_enabled(name: str) -> bool:
+    page_breaks = FORMAT_CONFIG.get("page_breaks", {})
+    if isinstance(page_breaks, dict) and name in page_breaks:
+        return bool(page_breaks[name])
+    return bool(DEFAULT_FORMAT_CONFIG["page_breaks"][name])
+
+
 def apply_run_format(run, style_key: str) -> None:
     ensure_run_fonts(
         run,
@@ -125,6 +148,26 @@ def apply_style_format(style, style_key: str) -> None:
 
 def clean(text: str) -> str:
     return " ".join(text.split())
+
+
+def title_toc() -> str:
+    return config_title("toc")
+
+
+def title_figures() -> str:
+    return config_title("figures")
+
+
+def title_tables() -> str:
+    return config_title("tables")
+
+
+def title_introduction() -> str:
+    return config_title("introduction")
+
+
+def front_titles() -> set[str]:
+    return {title_toc(), title_figures(), title_tables()}
 
 
 def remove_paragraph(paragraph) -> None:
@@ -373,18 +416,18 @@ def parse_numbered_heading(text: str):
 
 
 def is_intro_heading_text(text: str) -> bool:
-    if text == TITLE_INTRODUCTION:
+    if text == title_introduction():
         return True
     parsed = parse_numbered_heading(text)
-    return parsed is not None and parsed[0] == [1] and parsed[1] == TITLE_INTRODUCTION
+    return parsed is not None and parsed[0] == [1] and parsed[1] == title_introduction()
 
 
 def has_old_numbered_intro_structure(doc: Document, body_start: int) -> bool:
     first_text = clean(doc.paragraphs[body_start].text)
     parsed = parse_numbered_heading(first_text)
-    if parsed is not None and parsed[0] == [1] and parsed[1] == TITLE_INTRODUCTION:
+    if parsed is not None and parsed[0] == [1] and parsed[1] == title_introduction():
         return True
-    if first_text != TITLE_INTRODUCTION:
+    if first_text != title_introduction():
         return False
     for paragraph in doc.paragraphs[body_start + 1 :]:
         parsed = parse_numbered_heading(clean(paragraph.text))
@@ -409,7 +452,7 @@ def heading_level_from_text(text: str) -> int | None:
 
 
 def first_body_index(doc: Document):
-    front_end = find_paragraph(doc, TITLE_TABLES)
+    front_end = find_paragraph(doc, title_tables())
     search_start = 0 if front_end is None else front_end + 1
     for i, paragraph in enumerate(doc.paragraphs):
         if i < search_start:
@@ -425,7 +468,7 @@ def first_body_index(doc: Document):
         text = clean(paragraph.text)
         if is_intro_heading_text(text):
             return i
-        if HEADING_TEXT_RE.match(text) and text not in {TITLE_TOC, TITLE_FIGURES, TITLE_TABLES}:
+        if HEADING_TEXT_RE.match(text) and text not in front_titles():
             return i
     return None
 
@@ -445,15 +488,15 @@ def apply_heading_styles(doc: Document) -> int:
     changed = 0
     for paragraph in doc.paragraphs[body_start:]:
         text = clean(paragraph.text)
-        if text in FRONT_TITLES:
+        if text in front_titles():
             continue
         level = heading_level_from_text(text)
         if level is None:
             continue
         parsed = parse_numbered_heading(text)
         if is_intro_heading_text(text):
-            if text != TITLE_INTRODUCTION:
-                replace_paragraph_text(paragraph, TITLE_INTRODUCTION)
+            if text != title_introduction():
+                replace_paragraph_text(paragraph, title_introduction())
             paragraph.style = intro_style
             clear_outline_level(paragraph)
         elif old_numbered_intro and parsed is not None and parsed[0][0] == 1:
@@ -559,13 +602,13 @@ def replace_between(doc: Document, start_text: str, end_text: str, replacement) 
 def prepare_main_toc(doc: Document) -> bool:
     ensure_table_of_figures_style(doc)
     ensure_toc_styles(doc)
-    ensure_front_title(doc, TITLE_TOC)
-    ensure_front_title(doc, TITLE_FIGURES, page_break_before=True)
-    ensure_front_title(doc, TITLE_TABLES, page_break_before=True)
+    ensure_front_title(doc, title_toc())
+    ensure_front_title(doc, title_figures(), page_break_before=page_break_enabled("before_figures"))
+    ensure_front_title(doc, title_tables(), page_break_before=page_break_enabled("before_tables"))
     return replace_between(
         doc,
-        TITLE_TOC,
-        TITLE_FIGURES,
+        title_toc(),
+        title_figures(),
         make_toc_field(r'TOC \o "1-3" \h \z \t "Report Intro Heading,1"', "目录将在 Word 中自动更新。"),
     )
 
@@ -576,9 +619,9 @@ def parse_toc_pages(doc: Document) -> dict[str, int]:
         if not style_name(paragraph).lower().startswith("toc "):
             continue
         text = clean(paragraph.text)
-        intro_match = INTRO_TOC_LINE_RE.match(text)
+        intro_match = re.match(rf"^{re.escape(title_introduction())}\s+(\d+)$", text)
         if intro_match:
-            pages[TITLE_INTRODUCTION] = int(intro_match.group(1))
+            pages[title_introduction()] = int(intro_match.group(1))
             continue
         match = TOC_LINE_RE.match(text)
         if not match:
@@ -609,7 +652,7 @@ def collect_caption_entries(doc: Document, pages: dict[str, int]):
     seen_tables = set()
     for paragraph in doc.paragraphs[body_start:]:
         text = clean(paragraph.text)
-        if text == TITLE_INTRODUCTION or is_heading_style(paragraph):
+        if text == title_introduction() or is_heading_style(paragraph):
             headings.append(text)
             continue
         if FIG_RE.match(text):
@@ -664,6 +707,8 @@ def first_body_heading_text(doc: Document) -> str | None:
 
 
 def ensure_body_starts_on_new_page(doc: Document) -> bool:
+    if not page_break_enabled("before_body"):
+        return False
     idx = first_body_index(doc)
     if idx is None:
         return False
@@ -677,7 +722,7 @@ def prepare(path: Path, backup: bool) -> None:
         shutil.copy2(path, backup_path)
         print(f"backup={backup_path}")
     doc = Document(str(path))
-    front_removed = remove_paragraphs_before(doc, TITLE_TOC)
+    front_removed = remove_paragraphs_before(doc, title_toc())
     changed = apply_heading_styles(doc)
     toc_ok = prepare_main_toc(doc)
     doc.save(str(path))
@@ -691,8 +736,8 @@ def finalize(path: Path) -> None:
     pages = parse_toc_pages(doc)
     figures, tables = collect_caption_entries(doc, pages)
     body_heading = first_body_heading_text(doc)
-    fig_ok = write_static_list(doc, TITLE_FIGURES, TITLE_TABLES, figures)
-    table_ok = False if body_heading is None else write_static_list(doc, TITLE_TABLES, body_heading, tables)
+    fig_ok = write_static_list(doc, title_figures(), title_tables(), figures)
+    table_ok = False if body_heading is None else write_static_list(doc, title_tables(), body_heading, tables)
     body_page_break_ok = ensure_body_starts_on_new_page(doc)
     doc.save(str(path))
     print(f"toc_pages_found={len(pages)}")

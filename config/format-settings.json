@@ -1,4 +1,15 @@
 {
+  "titles": {
+    "toc": "目录",
+    "figures": "插图清单",
+    "tables": "附表清单",
+    "introduction": "引言"
+  },
+  "page_breaks": {
+    "before_figures": true,
+    "before_tables": true,
+    "before_body": true
+  },
   "line_spacing": 1.5,
   "front_title": {
     "font": "仿宋",
