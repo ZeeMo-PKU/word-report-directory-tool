@@ -21,11 +21,13 @@ TITLE_TOC = "目录"
 TITLE_FIGURES = "插图清单"
 TITLE_TABLES = "附表清单"
 TITLE_INTRODUCTION = "引言"
+INTRO_STYLE_NAME = "Report Intro Heading"
 
 HEADING_TEXT_RE = re.compile(r"^\d+(?:\.\d+){0,2}\s+\S+")
 FIG_RE = re.compile(r"^图\s+\d+(?:\.\d+)?\s+")
 TAB_RE = re.compile(r"^表\s+\d+(?:\.\d+)?\s+")
 TOC_LINE_RE = re.compile(r"^(\d+(?:\.\d+){0,2})\s+(.+?)\s+(\d+)$")
+INTRO_TOC_LINE_RE = re.compile(rf"^{re.escape(TITLE_INTRODUCTION)}\s+(\d+)$")
 HEADING_STYLE_IDS = {1: "Heading1", 2: "Heading2", 3: "Heading3"}
 HEADING_STYLE_NAMES = {
     1: ("Heading 1", "标题 1"),
@@ -88,6 +90,26 @@ def clear_outline_level(paragraph) -> None:
     ppr = paragraph._p.get_or_add_pPr()
     for outline in list(ppr.xpath("./w:outlineLvl")):
         ppr.remove(outline)
+
+
+def set_outline_level(paragraph, level: int) -> None:
+    ppr = paragraph._p.get_or_add_pPr()
+    for outline in list(ppr.xpath("./w:outlineLvl")):
+        ppr.remove(outline)
+    outline = OxmlElement("w:outlineLvl")
+    outline.set(qn("w:val"), str(level - 1))
+    ppr.append(outline)
+
+
+def suppress_numbering(paragraph) -> None:
+    ppr = paragraph._p.get_or_add_pPr()
+    for num_pr in list(ppr.xpath("./w:numPr")):
+        ppr.remove(num_pr)
+    num_pr = OxmlElement("w:numPr")
+    num_id = OxmlElement("w:numId")
+    num_id.set(qn("w:val"), "0")
+    num_pr.append(num_id)
+    ppr.append(num_pr)
 
 
 def ensure_page_break_at_start(paragraph) -> None:
@@ -199,6 +221,36 @@ def get_heading_style(doc: Document, level: int):
     return style
 
 
+def ensure_intro_style(doc: Document):
+    style = find_style(doc, names=(INTRO_STYLE_NAME,))
+    if style is None:
+        style = doc.styles.add_style(INTRO_STYLE_NAME, WD_STYLE_TYPE.PARAGRAPH)
+    base_style = find_style(doc, names=("Normal", "正文"), style_ids=("Normal",))
+    if base_style is not None:
+        style.base_style = base_style
+    ensure_style_fonts(style, "宋体", 14, True)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_before = Pt(0)
+    style.paragraph_format.space_after = Pt(0)
+    ppr = style._element.get_or_add_pPr()
+    for element_name in ("./w:outlineLvl", "./w:numPr"):
+        for element in list(ppr.xpath(element_name)):
+            ppr.remove(element)
+    return style
+
+
+def heading_level_from_text(text: str) -> int | None:
+    if text == TITLE_INTRODUCTION:
+        return 1
+    if re.match(r"^\d+\.\d+\.\d+\s+\S+", text):
+        return 3
+    if re.match(r"^\d+\.\d+\s+\S+", text):
+        return 2
+    if re.match(r"^\d+\s+\S+", text):
+        return 1
+    return None
+
+
 def first_body_index(doc: Document):
     front_end = find_paragraph(doc, TITLE_TABLES)
     search_start = 0 if front_end is None else front_end + 1
@@ -225,6 +277,7 @@ def apply_heading_styles(doc: Document) -> int:
     body_start = first_body_index(doc)
     if body_start is None:
         return 0
+    intro_style = ensure_intro_style(doc)
     heading_styles = {
         1: get_heading_style(doc, 1),
         2: get_heading_style(doc, 2),
@@ -235,19 +288,17 @@ def apply_heading_styles(doc: Document) -> int:
         text = clean(paragraph.text)
         if text in FRONT_TITLES:
             continue
-        if text == TITLE_INTRODUCTION:
-            paragraph.style = heading_styles[1]
-            changed += 1
+        level = heading_level_from_text(text)
+        if level is None:
             continue
-        if re.match(r"^\d+\s+\S+", text):
-            paragraph.style = heading_styles[1]
-            changed += 1
-        elif re.match(r"^\d+\.\d+\s+\S+", text):
-            paragraph.style = heading_styles[2]
-            changed += 1
-        elif re.match(r"^\d+\.\d+\.\d+\s+\S+", text):
-            paragraph.style = heading_styles[3]
-            changed += 1
+        if text == TITLE_INTRODUCTION:
+            paragraph.style = intro_style
+            clear_outline_level(paragraph)
+        else:
+            paragraph.style = heading_styles[level]
+            set_outline_level(paragraph, level)
+        suppress_numbering(paragraph)
+        changed += 1
     return changed
 
 
@@ -343,7 +394,7 @@ def prepare_main_toc(doc: Document) -> bool:
         doc,
         TITLE_TOC,
         TITLE_FIGURES,
-        make_toc_field(r'TOC \o "1-3" \h \z \u', "目录将在 Word 中自动更新。"),
+        make_toc_field(r'TOC \o "1-3" \h \z \t "Report Intro Heading,1"', "目录将在 Word 中自动更新。"),
     )
 
 
@@ -353,6 +404,10 @@ def parse_toc_pages(doc: Document) -> dict[str, int]:
         if not style_name(paragraph).lower().startswith("toc "):
             continue
         text = clean(paragraph.text)
+        intro_match = INTRO_TOC_LINE_RE.match(text)
+        if intro_match:
+            pages[TITLE_INTRODUCTION] = int(intro_match.group(1))
+            continue
         match = TOC_LINE_RE.match(text)
         if not match:
             continue
@@ -382,7 +437,7 @@ def collect_caption_entries(doc: Document, pages: dict[str, int]):
     seen_tables = set()
     for paragraph in doc.paragraphs[body_start:]:
         text = clean(paragraph.text)
-        if is_heading_style(paragraph):
+        if text == TITLE_INTRODUCTION or is_heading_style(paragraph):
             headings.append(text)
             continue
         if FIG_RE.match(text):

@@ -21,7 +21,7 @@
 
 ### 它会做什么
 
-1. 把正文里的章节标题套用 Word 标题样式：`Heading 1`、`Heading 2`、`Heading 3`，并兼容中文 Word 样式。
+1. 把正文里的编号章节标题套用 Word 标题样式：`Heading 1`、`Heading 2`、`Heading 3`，并兼容中文 Word 样式；`引言` 会作为一级目录项单独进入目录。
 2. 删除手写主目录，插入真正的 Word 自动目录，并刷新页码。
 3. 更新 `插图清单` 和 `附表清单`，给正文图题注、表题注套用 `图题注`、`表题注` 样式。
 4. 对中文用户名、中文文件夹名、中文文档路径做了编码兼容处理。
@@ -100,7 +100,7 @@ If that file already exists, a timestamp is appended automatically.
 
 ### What It Does
 
-1. Applies Word heading styles to numbered body headings: `Heading 1`, `Heading 2`, and `Heading 3`, with compatibility for Chinese Word style tables.
+1. Applies Word heading styles to numbered body headings: `Heading 1`, `Heading 2`, and `Heading 3`, with compatibility for Chinese Word style tables; `引言` is added as a separate level-1 TOC entry.
 2. Replaces a manually typed main TOC with a real Word TOC field and refreshes page numbers.
 3. Updates `插图清单` and `附表清单`, and applies figure/table caption styles to matching captions.
 4. Handles Chinese usernames, Chinese folder names, and Chinese document paths more reliably.
