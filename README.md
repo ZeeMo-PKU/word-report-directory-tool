@@ -19,6 +19,23 @@
 
 如果同名文件已经存在，会自动追加时间戳。
 
+### 自定义字体和格式
+
+可以用记事本打开 `config\format-settings.json`，修改目录标题、目录条目、正文标题、引言、图表清单的字体、字号、是否加粗和行距。保存后重新运行工具即可生效。
+
+常用字段：
+
+```text
+front_title       目录/插图清单/附表清单标题
+toc_1/toc_2/toc_3 主目录一级/二级/三级条目
+heading_1/2/3     正文一级/二级/三级标题
+intro             引言标题
+intro_subheading  引言内部小标题，不进入目录
+caption           正文图题注、表题注
+list_entry        插图清单、附表清单条目
+line_spacing      默认行距
+```
+
 ### 它会做什么
 
 1. 把正文里的编号章节标题套用 Word 标题样式：`Heading 1`、`Heading 2`、`Heading 3`，并兼容中文 Word 样式；`引言` 会作为一级目录项单独进入目录。
@@ -99,6 +116,23 @@ report.with-directories.docx
 ```
 
 If that file already exists, a timestamp is appended automatically.
+
+### Custom Fonts And Formatting
+
+Open `config\format-settings.json` with a text editor to change fonts, font sizes, bold settings, and default line spacing for TOC titles, TOC entries, body headings, the introduction, captions, and figure/table lists. Save the file and run the tool again.
+
+Common keys:
+
+```text
+front_title       TOC/List of Figures/List of Tables titles
+toc_1/toc_2/toc_3 Main TOC level 1/2/3 entries
+heading_1/2/3     Body heading level 1/2/3
+intro             Introduction heading
+intro_subheading  Introduction subheadings, excluded from the TOC
+caption           Figure/table captions in the body
+list_entry        List of figures/tables entries
+line_spacing      Default line spacing
+```
 
 ### What It Does
 

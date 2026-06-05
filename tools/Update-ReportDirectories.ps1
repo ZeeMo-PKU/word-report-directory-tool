@@ -4,6 +4,7 @@ param(
 
     [string]$CopySuffix = ".with-directories",
     [string]$PythonPath = "",
+    [string]$ConfigPath = "",
     [switch]$NoBackup,
     [switch]$Visible
 )
@@ -152,14 +153,30 @@ if ($document.Name.StartsWith("~$")) {
 $target = Copy-DocumentForUpdate -Document $document -Suffix $CopySuffix
 $python = Get-Python -ExplicitPath $PythonPath
 $script = Join-Path $PSScriptRoot "report_directories.py"
+$toolRoot = Split-Path -Parent $PSScriptRoot
+$resolvedConfigPath = $ConfigPath
+if ([string]::IsNullOrWhiteSpace($resolvedConfigPath)) {
+    $defaultConfigPath = Join-Path $toolRoot "config\format-settings.json"
+    if (Test-Path -LiteralPath $defaultConfigPath) {
+        $resolvedConfigPath = $defaultConfigPath
+    }
+}
 
 $prepareArgs = @($script, $target.FullName, "--phase", "prepare")
 if ($NoBackup) {
     $prepareArgs += "--no-backup"
 }
+if (-not [string]::IsNullOrWhiteSpace($resolvedConfigPath)) {
+    $prepareArgs += @("--config", (Get-Item -LiteralPath $resolvedConfigPath).FullName)
+}
+
+$finalizeArgs = @($script, $target.FullName, "--phase", "finalize")
+if (-not [string]::IsNullOrWhiteSpace($resolvedConfigPath)) {
+    $finalizeArgs += @("--config", (Get-Item -LiteralPath $resolvedConfigPath).FullName)
+}
 
 Invoke-PythonReportScript -Python $python -Arguments $prepareArgs
 Update-MainTocWithWord -DocumentPath $target.FullName -ShowWord:$Visible
-Invoke-PythonReportScript -Python $python -Arguments @($script, $target.FullName, "--phase", "finalize")
+Invoke-PythonReportScript -Python $python -Arguments $finalizeArgs
 
 Write-Output ("updated={0}" -f $target.FullName)

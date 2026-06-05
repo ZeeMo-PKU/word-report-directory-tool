@@ -1,4 +1,5 @@
 import argparse
+import json
 import re
 import shutil
 import sys
@@ -37,6 +38,89 @@ HEADING_STYLE_NAMES = {
     3: ("Heading 3", "标题 3"),
 }
 FRONT_TITLES = {TITLE_TOC, TITLE_FIGURES, TITLE_TABLES}
+DEFAULT_FORMAT_CONFIG = {
+    "front_title": {"font": "仿宋", "size": 16, "bold": True},
+    "toc_1": {"font": "宋体", "size": 12, "bold": None},
+    "toc_2": {"font": "宋体", "size": 12, "bold": None},
+    "toc_3": {"font": "宋体", "size": 12, "bold": None},
+    "heading_1": {"font": "宋体", "size": 14, "bold": None},
+    "heading_2": {"font": "宋体", "size": 12, "bold": None},
+    "heading_3": {"font": "宋体", "size": 12, "bold": None},
+    "intro": {"font": "宋体", "size": 14, "bold": True},
+    "intro_subheading": {"font": "宋体", "size": 12, "bold": True},
+    "caption": {"font": "宋体", "size": 12, "bold": None},
+    "list_entry": {"font": "宋体", "size": 12, "bold": None},
+    "line_spacing": 1.5,
+}
+FORMAT_CONFIG = DEFAULT_FORMAT_CONFIG
+
+
+def merge_format_config(base: dict, override: dict | None) -> dict:
+    merged = {}
+    for key, value in base.items():
+        if isinstance(value, dict):
+            item = dict(value)
+            if isinstance(override, dict) and isinstance(override.get(key), dict):
+                item.update(override[key])
+            merged[key] = item
+        else:
+            merged[key] = override.get(key, value) if isinstance(override, dict) else value
+    if isinstance(override, dict):
+        for key, value in override.items():
+            if key not in merged:
+                merged[key] = value
+    return merged
+
+
+def load_format_config(path: Path | None) -> dict:
+    if path is None:
+        return DEFAULT_FORMAT_CONFIG
+    if not path.exists():
+        print(f"format_config_missing={path}")
+        return DEFAULT_FORMAT_CONFIG
+    with path.open("r", encoding="utf-8-sig") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError("Format config must be a JSON object.")
+    return merge_format_config(DEFAULT_FORMAT_CONFIG, data)
+
+
+def set_format_config(config: dict) -> None:
+    global FORMAT_CONFIG
+    FORMAT_CONFIG = config
+
+
+def format_option(name: str, key: str):
+    section = FORMAT_CONFIG.get(name, {})
+    if isinstance(section, dict) and key in section:
+        return section[key]
+    default_section = DEFAULT_FORMAT_CONFIG.get(name, {})
+    if isinstance(default_section, dict):
+        return default_section.get(key)
+    return None
+
+
+def line_spacing() -> float:
+    value = FORMAT_CONFIG.get("line_spacing", DEFAULT_FORMAT_CONFIG["line_spacing"])
+    return float(value)
+
+
+def apply_run_format(run, style_key: str) -> None:
+    ensure_run_fonts(
+        run,
+        str(format_option(style_key, "font")),
+        format_option(style_key, "size"),
+        format_option(style_key, "bold"),
+    )
+
+
+def apply_style_format(style, style_key: str) -> None:
+    ensure_style_fonts(
+        style,
+        str(format_option(style_key, "font")),
+        format_option(style_key, "size"),
+        format_option(style_key, "bold"),
+    )
 
 
 def clean(text: str) -> str:
@@ -155,8 +239,8 @@ def ensure_style(doc: Document, name: str, base: str = "Normal"):
     base_style = find_style(doc, names=(base, "Normal", "正文"), style_ids=("Normal",))
     if base_style is not None:
         style.base_style = base_style
-    ensure_style_fonts(style, "宋体", 12)
-    style.paragraph_format.line_spacing = 1.5
+    apply_style_format(style, "caption")
+    style.paragraph_format.line_spacing = line_spacing()
     style.paragraph_format.space_before = Pt(0)
     style.paragraph_format.space_after = Pt(0)
     return style
@@ -169,11 +253,22 @@ def ensure_table_of_figures_style(doc: Document):
     base_style = find_style(doc, names=("Normal", "正文"), style_ids=("a", "Normal"))
     if base_style is not None:
         style.base_style = base_style
-    ensure_style_fonts(style, "宋体", 12)
-    style.paragraph_format.line_spacing = 1.5
+    apply_style_format(style, "list_entry")
+    style.paragraph_format.line_spacing = line_spacing()
     style.paragraph_format.space_before = Pt(0)
     style.paragraph_format.space_after = Pt(0)
     return style
+
+
+def ensure_toc_styles(doc: Document) -> None:
+    for level in (1, 2, 3):
+        style = find_style(doc, names=(f"toc {level}", f"TOC {level}"))
+        if style is None:
+            continue
+        apply_style_format(style, f"toc_{level}")
+        style.paragraph_format.line_spacing = line_spacing()
+        style.paragraph_format.space_before = Pt(0)
+        style.paragraph_format.space_after = Pt(0)
 
 
 def find_paragraph(doc: Document, text: str, start: int = 0):
@@ -221,14 +316,15 @@ def get_heading_style(doc: Document, level: int):
         names=HEADING_STYLE_NAMES[level],
         style_ids=(HEADING_STYLE_IDS[level],),
     )
-    if style is not None:
-        return style
-
-    style = doc.styles.add_style(HEADING_STYLE_NAMES[level][0], WD_STYLE_TYPE.PARAGRAPH)
-    base_style = find_style(doc, names=("Normal", "正文"), style_ids=("Normal",))
-    if base_style is not None:
-        style.base_style = base_style
-    ensure_style_fonts(style, "宋体", 14 if level == 1 else 12)
+    if style is None:
+        style = doc.styles.add_style(HEADING_STYLE_NAMES[level][0], WD_STYLE_TYPE.PARAGRAPH)
+        base_style = find_style(doc, names=("Normal", "正文"), style_ids=("Normal",))
+        if base_style is not None:
+            style.base_style = base_style
+    apply_style_format(style, f"heading_{level}")
+    style.paragraph_format.line_spacing = line_spacing()
+    style.paragraph_format.space_before = Pt(0)
+    style.paragraph_format.space_after = Pt(0)
     return style
 
 
@@ -239,8 +335,8 @@ def ensure_intro_style(doc: Document):
     base_style = find_style(doc, names=("Normal", "正文"), style_ids=("Normal",))
     if base_style is not None:
         style.base_style = base_style
-    ensure_style_fonts(style, "宋体", 14, True)
-    style.paragraph_format.line_spacing = 1.5
+    apply_style_format(style, "intro")
+    style.paragraph_format.line_spacing = line_spacing()
     style.paragraph_format.space_before = Pt(0)
     style.paragraph_format.space_after = Pt(0)
     ppr = style._element.get_or_add_pPr()
@@ -257,8 +353,8 @@ def ensure_intro_subheading_style(doc: Document):
     base_style = find_style(doc, names=("Normal", "正文"), style_ids=("Normal",))
     if base_style is not None:
         style.base_style = base_style
-    ensure_style_fonts(style, "宋体", 12, True)
-    style.paragraph_format.line_spacing = 1.5
+    apply_style_format(style, "intro_subheading")
+    style.paragraph_format.line_spacing = line_spacing()
     style.paragraph_format.space_before = Pt(0)
     style.paragraph_format.space_after = Pt(0)
     ppr = style._element.get_or_add_pPr()
@@ -434,7 +530,7 @@ def ensure_front_title(doc: Document, text: str, page_break_before: bool = False
             set_paragraph_style_id(paragraph, "a")
         clear_outline_level(paragraph)
         paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        paragraph.paragraph_format.line_spacing = None if page_break_before else 1.5
+        paragraph.paragraph_format.line_spacing = None if page_break_before else line_spacing()
         paragraph.paragraph_format.space_before = None
         paragraph.paragraph_format.space_after = None
         if page_break_before:
@@ -442,7 +538,7 @@ def ensure_front_title(doc: Document, text: str, page_break_before: bool = False
         else:
             remove_page_breaks(paragraph)
         for run in paragraph.runs:
-            ensure_run_fonts(run, "仿宋", 16, True)
+            apply_run_format(run, "front_title")
     return idx
 
 
@@ -462,6 +558,7 @@ def replace_between(doc: Document, start_text: str, end_text: str, replacement) 
 
 def prepare_main_toc(doc: Document) -> bool:
     ensure_table_of_figures_style(doc)
+    ensure_toc_styles(doc)
     ensure_front_title(doc, TITLE_TOC)
     ensure_front_title(doc, TITLE_FIGURES, page_break_before=True)
     ensure_front_title(doc, TITLE_TABLES, page_break_before=True)
@@ -549,12 +646,12 @@ def write_static_list(doc: Document, start_text: str, end_text: str, entries) ->
         p.paragraph_format.tab_stops.add_tab_stop(
             Twips(8296), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS
         )
-        p.paragraph_format.line_spacing = 1.5
+        p.paragraph_format.line_spacing = line_spacing()
         caption_run = p.add_run(caption)
         tab_run = p.add_run("\t")
         page_run = p.add_run("" if page is None else str(page))
         for run in (caption_run, tab_run, page_run):
-            ensure_run_fonts(run, "宋体", 12)
+            apply_run_format(run, "list_entry")
         anchor.addnext(p._p)
     return True
 
@@ -609,8 +706,11 @@ def main() -> None:
     parser.add_argument("path", type=Path)
     parser.add_argument("--phase", choices=["prepare", "finalize"], required=True)
     parser.add_argument("--no-backup", action="store_true")
+    parser.add_argument("--config", type=Path)
     args = parser.parse_args()
     path = args.path.expanduser().resolve(strict=True)
+    config_path = None if args.config is None else args.config.expanduser().resolve(strict=False)
+    set_format_config(load_format_config(config_path))
 
     if args.phase == "prepare":
         prepare(path, backup=not args.no_backup)
