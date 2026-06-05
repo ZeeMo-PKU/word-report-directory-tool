@@ -1,27 +1,92 @@
-# Word 科技报告目录自动化工具
+# Word Report Directory Tool
 
-一个 Windows 小工具，用来给 Word 科技报告自动整理主目录、插图清单和附表清单。工具会复制原文档，在原文件旁边生成新文件，不会覆盖原文件。
+一个 Windows 小工具，用来自动整理 Word 科技报告中的主目录、插图清单和附表清单。工具会复制原文档，在原文件旁边生成新文件，不会覆盖原文件。
 
 ## 中文说明
 
-### 最简单用法
+### 适用场景
 
-1. 第一次使用前，双击 `Install-Dependencies.bat` 安装依赖。
-2. 双击 `Run-WordReportTool.bat`。
-3. 在弹出的窗口里选择要处理的 `.docx` 文件。
-4. 等待完成。
+适合已经写好正文、但需要统一生成这些内容的 Word 科技报告：
 
-默认输出文件名类似：
+- 主目录
+- 插图清单
+- 附表清单
+- 正文标题样式
+- 引言的无编号目录项
+
+### 运行环境
+
+- Windows
+- 桌面版 Microsoft Word
+- Python 3
+- 第一次安装依赖时需要联网
+
+如果还没安装 Python，请从 <https://www.python.org/downloads/> 安装，并勾选 `Add python.exe to PATH`。
+
+### 快速使用
+
+1. 下载或克隆本仓库。
+2. 第一次使用前，双击 `Install-Dependencies.bat`。
+3. 双击 `Run-WordReportTool.bat`。
+4. 在弹出的窗口里选择要处理的 `.docx` 文件。
+5. 等待完成。
+
+输出文件会生成在原文档旁边，文件名类似：
 
 ```text
-报告.with-directories.docx
+report.with-directories.docx
 ```
 
-如果同名文件已经存在，会自动追加时间戳。
+如果同名文件已经存在，工具会自动追加时间戳。原文档不会被覆盖。
+
+### 文档格式要求
+
+文档前面最好有这些独立段落：
+
+```text
+目录
+插图清单
+附表清单
+引言
+```
+
+正文标题建议写成：
+
+```text
+引言
+1 第一章标题
+1.1 二级标题
+1.1.1 三级标题
+```
+
+工具也兼容这种旧写法：
+
+```text
+1 引言
+1.1 引言内部小标题
+1.2 引言内部小标题
+2 第一章标题
+```
+
+它会自动处理成：
+
+```text
+引言
+1 第一章标题
+```
+
+其中 `1.1 / 1.2` 这类引言内部小标题不会进入主目录，后续章节编号会自动前移。
+
+图题注和表题注应类似：
+
+```text
+图 1 示例图题注
+表 1 示例表题注
+```
 
 ### 自定义字体和格式
 
-可以用记事本打开 `config\format-settings.json`，修改目录标题、目录条目、正文标题、引言、图表清单的字体、字号、是否加粗和行距。保存后重新运行工具即可生效。
+可以打开 `config\format-settings.json` 修改字体、字号、加粗和行距。保存后重新运行工具即可生效。
 
 常用字段：
 
@@ -36,110 +101,76 @@ list_entry        插图清单、附表清单条目
 line_spacing      默认行距
 ```
 
-### 它会做什么
+每个格式项通常长这样：
 
-1. 把正文里的编号章节标题套用 Word 标题样式：`Heading 1`、`Heading 2`、`Heading 3`，并兼容中文 Word 样式；`引言` 会作为一级目录项单独进入目录。
-2. 删除手写主目录，插入真正的 Word 自动目录，并刷新页码。
-3. 更新 `插图清单` 和 `附表清单`，给正文图题注、表题注套用 `图题注`、`表题注` 样式。
-4. 对中文用户名、中文文件夹名、中文文档路径做了编码兼容处理。
-
-### 文档格式要求
-
-文档前面最好有这些标题：
-
-```text
-目录
-插图清单
-附表清单
-引言
+```json
+{
+  "font": "宋体",
+  "size": 12,
+  "bold": null
+}
 ```
 
-正文标题应类似：
+说明：
 
-```text
-引言
-1 第一章标题
-1.1 探索任务的技术定位
-1.1.1 技术动机
+- `font` 是字体名，例如 `宋体`、`黑体`、`仿宋`、`Times New Roman`。
+- `size` 是字号，单位为 pt。
+- `bold` 可填 `true`、`false` 或 `null`。`null` 表示不强制改加粗状态。
+
+### PowerShell 手动运行
+
+也可以打开 PowerShell，进入工具目录后运行：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\Update-ReportDirectories.ps1" -Path "C:\path\to\report.docx"
 ```
 
-如果原文写成 `1 引言`、`1.1 引言内部小标题`、`2 第一章标题`，工具会自动把 `1 引言` 改成无编号的 `引言`，引言内部小标题不进入目录，并把后续章节编号前移一位。
+使用自定义配置文件：
 
-图题注应类似：
-
-```text
-图 1 论文中的 Graph.hls 工作流对比
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\Update-ReportDirectories.ps1" -Path "C:\path\to\report.docx" -ConfigPath ".\config\format-settings.json"
 ```
 
-表题注应类似：
+### 常见问题
 
-```text
-表 1 报告二内容来源与证据组织
-```
+处理前请先关闭正在打开的同一个 Word 文档。
 
-### 如果双击运行不了
-
-先看桌面上的日志文件：
+如果双击运行失败，先看桌面上的日志文件：
 
 ```text
 WordReportTool-run-log.txt
 ```
 
-如果提示找不到 Python，请先安装 Python 3，并在安装时勾选 `Add python.exe to PATH`，然后重新双击 `Install-Dependencies.bat`。
+如果提示找不到 Python，请安装 Python 3，并确认安装时勾选了 `Add python.exe to PATH`，然后重新运行 `Install-Dependencies.bat`。
 
-如果提示找不到 Word COM 自动化，请确认电脑上安装的是桌面版 Microsoft Word，而不是只有网页版 Word。
-
-也可以打开 PowerShell，进入工具目录后运行：
-
-```powershell
-cd "解压后的工具目录"
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\Update-ReportDirectories.ps1" -Path "C:\Users\YourName\Desktop\report.docx"
-```
-
-注意：处理前请先关闭正在打开的同一个 Word 文档。
+如果提示找不到 Word COM 自动化，请确认电脑上安装的是桌面版 Microsoft Word，而不是网页版 Word。
 
 ## English
 
 This is a small Windows utility for updating Word report directories: the main table of contents, list of figures, and list of tables. It works on a copy of the selected document and does not overwrite the original file.
 
+### Requirements
+
+- Windows
+- Desktop Microsoft Word
+- Python 3
+- Internet access for first-time dependency installation
+
 ### Quick Start
 
-1. Before first use, double-click `Install-Dependencies.bat`.
-2. Double-click `Run-WordReportTool.bat`.
-3. Select a `.docx` file in the file picker.
-4. Wait for the tool to finish.
+1. Download or clone this repository.
+2. Before first use, double-click `Install-Dependencies.bat`.
+3. Double-click `Run-WordReportTool.bat`.
+4. Select a `.docx` file in the file picker.
+5. Wait for the tool to finish.
 
-The default output file name looks like this:
+The output file is written next to the original document:
 
 ```text
 report.with-directories.docx
 ```
 
-If that file already exists, a timestamp is appended automatically.
-
-### Custom Fonts And Formatting
-
-Open `config\format-settings.json` with a text editor to change fonts, font sizes, bold settings, and default line spacing for TOC titles, TOC entries, body headings, the introduction, captions, and figure/table lists. Save the file and run the tool again.
-
-Common keys:
-
-```text
-front_title       TOC/List of Figures/List of Tables titles
-toc_1/toc_2/toc_3 Main TOC level 1/2/3 entries
-heading_1/2/3     Body heading level 1/2/3
-intro             Introduction heading
-intro_subheading  Introduction subheadings, excluded from the TOC
-caption           Figure/table captions in the body
-list_entry        List of figures/tables entries
-line_spacing      Default line spacing
-```
-
-### What It Does
-
-1. Applies Word heading styles to numbered body headings: `Heading 1`, `Heading 2`, and `Heading 3`, with compatibility for Chinese Word style tables; `引言` is added as a separate level-1 TOC entry.
-2. Replaces a manually typed main TOC with a real Word TOC field and refreshes page numbers.
-3. Updates `插图清单` and `附表清单`, and applies figure/table caption styles to matching captions.
-4. Handles Chinese usernames, Chinese folder names, and Chinese document paths more reliably.
+The original document is not overwritten.
 
 ### Expected Document Format
 
@@ -157,27 +188,41 @@ Body headings should look like:
 ```text
 引言
 1 Chapter title
-1.1 技术定位
-1.1.1 技术动机
+1.1 Section title
+1.1.1 Subsection title
 ```
 
 If the source document uses `1 引言`, `1.1 introduction subheading`, and then `2 Chapter title`, the tool converts the introduction to an unnumbered TOC entry, excludes introduction subheadings from the TOC, and shifts later chapter numbers down by one.
 
-Figure captions should look like:
+Figure and table captions should look like:
 
 ```text
 图 1 Example figure caption
+表 1 Example table caption
 ```
 
-Table captions should look like:
+### Custom Formatting
+
+Edit `config\format-settings.json` to customize fonts, font sizes, bold settings, and line spacing. The tool reads this file automatically when it exists.
+
+Common keys:
 
 ```text
-表 1 Example table caption
+front_title       TOC/List of Figures/List of Tables titles
+toc_1/toc_2/toc_3 Main TOC level 1/2/3 entries
+heading_1/2/3     Body heading level 1/2/3
+intro             Introduction heading
+intro_subheading  Introduction subheadings, excluded from the TOC
+caption           Figure/table captions in the body
+list_entry        List of figures/tables entries
+line_spacing      Default line spacing
 ```
 
 ### Troubleshooting
 
-Check the log file on the desktop:
+Close the target Word document before processing it.
+
+If the tool fails, check the desktop log file:
 
 ```text
 WordReportTool-run-log.txt
@@ -186,12 +231,3 @@ WordReportTool-run-log.txt
 If Python is not found, install Python 3 and tick `Add python.exe to PATH`, then run `Install-Dependencies.bat` again.
 
 If Word COM automation is not available, make sure the desktop version of Microsoft Word is installed.
-
-You can also run the main script manually from PowerShell:
-
-```powershell
-cd "path\to\word-report-directory-tool"
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\tools\Update-ReportDirectories.ps1" -Path "C:\Users\you\Desktop\report.docx"
-```
-
-Close the target Word document before processing it.
