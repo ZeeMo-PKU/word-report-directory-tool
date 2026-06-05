@@ -22,8 +22,10 @@ TITLE_FIGURES = "插图清单"
 TITLE_TABLES = "附表清单"
 TITLE_INTRODUCTION = "引言"
 INTRO_STYLE_NAME = "Report Intro Heading"
+INTRO_SUBHEADING_STYLE_NAME = "Report Intro Subheading"
 
 HEADING_TEXT_RE = re.compile(r"^\d+(?:\.\d+){0,2}\s+\S+")
+NUMBERED_HEADING_RE = re.compile(r"^(?P<number>\d+(?:\.\d+){0,2})\s+(?P<title>\S.*)$")
 FIG_RE = re.compile(r"^图\s+\d+(?:\.\d+)?\s+")
 TAB_RE = re.compile(r"^表\s+\d+(?:\.\d+)?\s+")
 TOC_LINE_RE = re.compile(r"^(\d+(?:\.\d+){0,2})\s+(.+?)\s+(\d+)$")
@@ -124,6 +126,15 @@ def ensure_page_break_at_start(paragraph) -> None:
 def remove_page_breaks(paragraph) -> None:
     for br in list(paragraph._p.xpath('.//w:br[@w:type="page"]')):
         br.getparent().remove(br)
+
+
+def replace_paragraph_text(paragraph, text: str) -> None:
+    had_page_break = bool(paragraph._p.xpath('.//w:br[@w:type="page"]'))
+    for run in list(paragraph.runs):
+        run._element.getparent().remove(run._element)
+    paragraph.add_run(text)
+    if had_page_break:
+        ensure_page_break_at_start(paragraph)
 
 
 def find_style(doc: Document, names=(), style_ids=()):
@@ -239,16 +250,66 @@ def ensure_intro_style(doc: Document):
     return style
 
 
-def heading_level_from_text(text: str) -> int | None:
+def ensure_intro_subheading_style(doc: Document):
+    style = find_style(doc, names=(INTRO_SUBHEADING_STYLE_NAME,))
+    if style is None:
+        style = doc.styles.add_style(INTRO_SUBHEADING_STYLE_NAME, WD_STYLE_TYPE.PARAGRAPH)
+    base_style = find_style(doc, names=("Normal", "正文"), style_ids=("Normal",))
+    if base_style is not None:
+        style.base_style = base_style
+    ensure_style_fonts(style, "宋体", 12, True)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_before = Pt(0)
+    style.paragraph_format.space_after = Pt(0)
+    ppr = style._element.get_or_add_pPr()
+    for element_name in ("./w:outlineLvl", "./w:numPr"):
+        for element in list(ppr.xpath(element_name)):
+            ppr.remove(element)
+    return style
+
+
+def parse_numbered_heading(text: str):
+    match = NUMBERED_HEADING_RE.match(text)
+    if match is None:
+        return None
+    parts = [int(part) for part in match.group("number").split(".")]
+    return parts, match.group("title")
+
+
+def is_intro_heading_text(text: str) -> bool:
     if text == TITLE_INTRODUCTION:
+        return True
+    parsed = parse_numbered_heading(text)
+    return parsed is not None and parsed[0] == [1] and parsed[1] == TITLE_INTRODUCTION
+
+
+def has_old_numbered_intro_structure(doc: Document, body_start: int) -> bool:
+    first_text = clean(doc.paragraphs[body_start].text)
+    parsed = parse_numbered_heading(first_text)
+    if parsed is not None and parsed[0] == [1] and parsed[1] == TITLE_INTRODUCTION:
+        return True
+    if first_text != TITLE_INTRODUCTION:
+        return False
+    for paragraph in doc.paragraphs[body_start + 1 :]:
+        parsed = parse_numbered_heading(clean(paragraph.text))
+        if parsed is None:
+            continue
+        parts, _ = parsed
+        return not (len(parts) == 1 and parts[0] == 1)
+    return False
+
+
+def format_numbered_heading(parts: list[int], title: str) -> str:
+    return f"{'.'.join(str(part) for part in parts)} {title}"
+
+
+def heading_level_from_text(text: str) -> int | None:
+    if is_intro_heading_text(text):
         return 1
-    if re.match(r"^\d+\.\d+\.\d+\s+\S+", text):
-        return 3
-    if re.match(r"^\d+\.\d+\s+\S+", text):
-        return 2
-    if re.match(r"^\d+\s+\S+", text):
-        return 1
-    return None
+    parsed = parse_numbered_heading(text)
+    if parsed is None:
+        return None
+    return len(parsed[0])
 
 
 def first_body_index(doc: Document):
@@ -258,7 +319,7 @@ def first_body_index(doc: Document):
         if i < search_start:
             continue
         text = clean(paragraph.text)
-        if text == TITLE_INTRODUCTION:
+        if is_intro_heading_text(text):
             return i
         if is_heading_style(paragraph, levels=(1,)) and HEADING_TEXT_RE.match(text):
             return i
@@ -266,7 +327,7 @@ def first_body_index(doc: Document):
         if i < search_start:
             continue
         text = clean(paragraph.text)
-        if text == TITLE_INTRODUCTION:
+        if is_intro_heading_text(text):
             return i
         if HEADING_TEXT_RE.match(text) and text not in {TITLE_TOC, TITLE_FIGURES, TITLE_TABLES}:
             return i
@@ -277,7 +338,9 @@ def apply_heading_styles(doc: Document) -> int:
     body_start = first_body_index(doc)
     if body_start is None:
         return 0
+    old_numbered_intro = has_old_numbered_intro_structure(doc, body_start)
     intro_style = ensure_intro_style(doc)
+    intro_subheading_style = ensure_intro_subheading_style(doc)
     heading_styles = {
         1: get_heading_style(doc, 1),
         2: get_heading_style(doc, 2),
@@ -291,10 +354,22 @@ def apply_heading_styles(doc: Document) -> int:
         level = heading_level_from_text(text)
         if level is None:
             continue
-        if text == TITLE_INTRODUCTION:
+        parsed = parse_numbered_heading(text)
+        if is_intro_heading_text(text):
+            if text != TITLE_INTRODUCTION:
+                replace_paragraph_text(paragraph, TITLE_INTRODUCTION)
             paragraph.style = intro_style
             clear_outline_level(paragraph)
+        elif old_numbered_intro and parsed is not None and parsed[0][0] == 1:
+            _, title = parsed
+            replace_paragraph_text(paragraph, title)
+            paragraph.style = intro_subheading_style
+            clear_outline_level(paragraph)
         else:
+            if old_numbered_intro and parsed is not None and parsed[0][0] > 1:
+                parts, title = parsed
+                shifted_parts = [parts[0] - 1, *parts[1:]]
+                replace_paragraph_text(paragraph, format_numbered_heading(shifted_parts, title))
             paragraph.style = heading_styles[level]
             set_outline_level(paragraph, level)
         suppress_numbering(paragraph)

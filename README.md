@@ -46,6 +46,8 @@
 1.1.1 技术动机
 ```
 
+如果原文写成 `1 引言`、`1.1 引言内部小标题`、`2 第一章标题`，工具会自动把 `1 引言` 改成无编号的 `引言`，引言内部小标题不进入目录，并把后续章节编号前移一位。
+
 图题注应类似：
 
 ```text
@@ -124,6 +126,8 @@ Body headings should look like:
 1.1 技术定位
 1.1.1 技术动机
 ```
+
+If the source document uses `1 引言`, `1.1 introduction subheading`, and then `2 Chapter title`, the tool converts the introduction to an unnumbered TOC entry, excludes introduction subheadings from the TOC, and shifts later chapter numbers down by one.
 
 Figure captions should look like:
 
