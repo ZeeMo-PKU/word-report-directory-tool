@@ -1,0 +1,13 @@
+__pycache__/
+.venv/
+dist/
+*.py[cod]
+*.tmp
+*.bak
+*.log
+*.docx
+*.docm
+*.dotx
+*.dotm
+~$*
+WordReportTool-run-log.txt
