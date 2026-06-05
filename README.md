@@ -34,13 +34,14 @@
 目录
 插图清单
 附表清单
-1 引言
+引言
 ```
 
 正文标题应类似：
 
 ```text
-1 引言
+引言
+1 第一章标题
 1.1 探索任务的技术定位
 1.1.1 技术动机
 ```
@@ -112,13 +113,14 @@ The front matter should preferably contain:
 目录
 插图清单
 附表清单
-1 引言
+引言
 ```
 
 Body headings should look like:
 
 ```text
-1 引言
+引言
+1 Chapter title
 1.1 技术定位
 1.1.1 技术动机
 ```

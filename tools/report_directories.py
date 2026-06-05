@@ -20,6 +20,7 @@ if hasattr(sys.stdout, "reconfigure"):
 TITLE_TOC = "目录"
 TITLE_FIGURES = "插图清单"
 TITLE_TABLES = "附表清单"
+TITLE_INTRODUCTION = "引言"
 
 HEADING_TEXT_RE = re.compile(r"^\d+(?:\.\d+){0,2}\s+\S+")
 FIG_RE = re.compile(r"^图\s+\d+(?:\.\d+)?\s+")
@@ -149,6 +150,15 @@ def find_paragraph(doc: Document, text: str, start: int = 0):
     return None
 
 
+def remove_paragraphs_before(doc: Document, text: str) -> int:
+    idx = find_paragraph(doc, text)
+    if idx is None or idx == 0:
+        return 0
+    for paragraph in list(doc.paragraphs[:idx]):
+        remove_paragraph(paragraph)
+    return idx
+
+
 def style_name(paragraph) -> str:
     style = paragraph.style
     if style is None:
@@ -196,12 +206,16 @@ def first_body_index(doc: Document):
         if i < search_start:
             continue
         text = clean(paragraph.text)
+        if text == TITLE_INTRODUCTION:
+            return i
         if is_heading_style(paragraph, levels=(1,)) and HEADING_TEXT_RE.match(text):
             return i
     for i, paragraph in enumerate(doc.paragraphs):
         if i < search_start:
             continue
         text = clean(paragraph.text)
+        if text == TITLE_INTRODUCTION:
+            return i
         if HEADING_TEXT_RE.match(text) and text not in {TITLE_TOC, TITLE_FIGURES, TITLE_TABLES}:
             return i
     return None
@@ -220,6 +234,10 @@ def apply_heading_styles(doc: Document) -> int:
     for paragraph in doc.paragraphs[body_start:]:
         text = clean(paragraph.text)
         if text in FRONT_TITLES:
+            continue
+        if text == TITLE_INTRODUCTION:
+            paragraph.style = heading_styles[1]
+            changed += 1
             continue
         if re.match(r"^\d+\s+\S+", text):
             paragraph.style = heading_styles[1]
@@ -432,9 +450,11 @@ def prepare(path: Path, backup: bool) -> None:
         shutil.copy2(path, backup_path)
         print(f"backup={backup_path}")
     doc = Document(str(path))
+    front_removed = remove_paragraphs_before(doc, TITLE_TOC)
     changed = apply_heading_styles(doc)
     toc_ok = prepare_main_toc(doc)
     doc.save(str(path))
+    print(f"front_paragraphs_removed={front_removed}")
     print(f"heading_styles_applied={changed}")
     print(f"main_toc_prepared={toc_ok}")
 
